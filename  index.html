@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>伝票計算ツール v1.3R+（v13R同UI＋セットジャン再設計＋オプション）</title>
+  <style>
+    :root{
+      --bg:#f7f7f9; --card:#ffffff; --ink:#111; --muted:#666; --primary:#0a7cff;
+      --danger:#c62828; --ok:#2e7d32; --border:#e5e6ea;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif; background:var(--bg); color:var(--ink);}
+    header{position:sticky; top:0; background:var(--card); padding:12px 16px; border-bottom:1px solid var(--border); z-index:10;}
+    header h1{margin:0; font-size:18px;}
+    main{padding:16px; max-width:880px; margin:0 auto;}
+    .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; box-shadow:0 1px 0 rgba(0,0,0,0.02);}
+    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+    .col{flex:1 1 140px; min-width:140px;}
+    .col.price{flex:0 0 140px; min-width:140px;}
+    .col.small{flex:0 0 120px; min-width:120px;}
+    label{font-size:12px; color:var(--muted); display:block; margin-bottom:6px;}
+    input[type="number"], input[type="text"]{
+      width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; font-size:16px;
+    }
+    .btn{appearance:none; border:0; padding:12px 14px; border-radius:10px; background:var(--primary); color:#fff; font-size:16px; cursor:pointer;}
+    .btn.ghost{background:#eef4ff; color:#0a3d8f;}
+    .btn.danger{background:#c62828;}
+    .btn.block{width:100%;}
+    .muted{color:var(--muted); font-size:12px;}
+    .table{width:100%; border-collapse:collapse; font-size:14px;}
+    .table th, .table td{padding:8px; border-bottom:1px solid var(--border); text-align:right;}
+    .table th:first-child, .table td:first-child{text-align:left;}
+    .kpi{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+    .kpi .box{padding:12px; border-radius:10px; background:#fafbff; border:1px solid var(--border); display:flex; flex-direction:column;}
+    .kpi .t{color:var(--muted); font-size:12px;}
+    .kpi .v{font-size:18px; font-weight:700;}
+    .pill{display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius:999px; border:1px solid var(--border); background:#fff; font-size:14px;}
+    @media (max-width:640px){ .kpi{grid-template-columns:repeat(2,1fr);} }
+    @media print{
+      header, .toolbar, footer, .muted, .btn{display:none !important;}
+      body{background:#fff;}
+      .card{border:0; box-shadow:none; padding:0;}
+    }
+  </style>
+</head>
+<body>
+  <header><h1>伝票計算ツール v1.3R+（v13R同UI＋セットジャン再設計＋オプション）</h1></header>
+  <main>
+    <div class="card">
+      <div class="row">
+        <div class="col">
+          <label>商品名</label>
+          <input id="name" type="text" placeholder="例：洗濯機 7kg">
+        </div>
+        <div class="col price">
+          <label>単価 (円)</label>
+          <input id="price" type="number" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="col small">
+          <label>数量</label>
+          <input id="qty" type="number" inputmode="numeric" min="1" value="1">
+        </div>
+        <div class="col">
+          <label style="visibility:hidden">add</label>
+          <button class="btn block" id="add">＋ 明細に追加</button>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:6px;">※ 商品名・単価・数量だけ入力すればOK。手入力最優先。</div>
+    </div>
+
+    <div class="card">
+      <table class="table" id="lines">
+        <thead>
+          <tr>
+            <th>商品名</th>
+            <th>単価</th>
+            <th>数量</th>
+            <th>小計</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="row" style="margin-top:8px; gap:8px;">
+        <button class="btn ghost" id="clear">明細クリア</button>
+        <button class="btn ghost" id="export">CSV出力</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="align-items:flex-end;">
+        <div class="col">
+          <label>4番（特別値引き：他店相対等）（円）</label>
+          <input id="disc4" type="number" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="col">
+          <label>家電値引き（光/モバイル契約連動）（円）</label>
+          <input id="kaden" type="number" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="col">
+          <label>セットジャン</label>
+          <div class="row" style="gap:8px;">
+            <label class="pill"><input type="radio" name="setjan_mode" value="none" checked> なし</label>
+            <label class="pill"><input type="radio" name="setjan_mode" value="on"> あり</label>
+            <input id="setjan_amount" type="number" inputmode="numeric" placeholder="金額を入力（例：10000）" style="display:none; max-width:220px;">
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <div class="col">
+          <label>オプション（加算）</label>
+          <div class="row" style="gap:8px; flex-wrap:wrap;">
+            <label class="pill"><input type="checkbox" class="opt" value="3300"> うち階段下げ +3,300</label>
+            <label class="pill"><input type="checkbox" class="opt" value="3300"> うち階段上げ +3,300</label>
+            <label class="pill"><input type="checkbox" class="opt" value="1100"> 洗濯機設置 +1,100</label>
+            <label class="pill"><input type="checkbox" class="opt" value="550"> リサイクル代金 +550</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="muted" style="margin-top:6px;">※ 合計 = 小計 −（セットジャン＋4番＋家電）＋ オプション加算</div>
+    </div>
+
+    <div class="card">
+      <div class="kpi">
+        <div class="box">
+          <span class="t">小計</span>
+          <span class="v" id="subtotal">¥0</span>
+        </div>
+        <div class="box">
+          <span class="t">割引合計</span>
+          <span class="v" id="discountTotal">-¥0</span>
+        </div>
+        <div class="box">
+          <span class="t">オプション加算</span>
+          <span class="v" id="optionTotal">+¥0</span>
+        </div>
+        <div class="box">
+          <span class="t">お支払い金額</span>
+          <span class="v" id="pay">¥0</span>
+        </div>
+      </div>
+      <div id="note" class="warning" style="display:none; color:var(--danger); margin-top:8px;"></div>
+      <div class="row" style="margin-top:8px; gap:8px;">
+        <button class="btn" id="print">印刷 / PDF保存</button>
+        <button class="btn ghost" id="copy">お支払い金額をコピー</button>
+      </div>
+    </div>
+
+    <div class="muted">v1.3R+ — v13Rのレイアウトを継承。ポイント機能削除。セットジャン（なし/あり金額入力）・オプション加算対応。</div>
+  </main>
+  <footer style="padding:16px; text-align:center; color:#999; font-size:12px;">© 伝票計算ツール</footer>
+
+<script>
+const nameEl = document.getElementById('name');
+const priceEl = document.getElementById('price');
+const qtyEl = document.getElementById('qty');
+const addBtn = document.getElementById('add');
+const tableBody = document.querySelector('#lines tbody');
+const clearBtn = document.getElementById('clear');
+const exportBtn = document.getElementById('export');
+
+const disc4El  = document.getElementById('disc4');
+const kadenEl  = document.getElementById('kaden');
+
+const setjanModeRadios = document.querySelectorAll('input[name="setjan_mode"]');
+const setjanAmountEl = document.getElementById('setjan_amount');
+
+const subtotalEl = document.getElementById('subtotal');
+const discountTotalEl = document.getElementById('discountTotal');
+const optionTotalEl = document.getElementById('optionTotal');
+const payEl = document.getElementById('pay');
+
+const noteEl = document.getElementById('note');
+const printBtn = document.getElementById('print');
+const copyBtn  = document.getElementById('copy');
+
+const optionChecks = document.querySelectorAll('input.opt');
+
+let lines = [];
+
+function addLine(){
+  const name = (nameEl.value||'').trim();
+  const price = Number(priceEl.value||0);
+  const qty = Math.max(1, Number(qtyEl.value||1));
+  if(!name){ showNote('商品名を入力してください。'); return; }
+  if(price<=0){ showNote('単価が正しくありません。'); return; }
+  if(qty<=0){ showNote('数量が正しくありません。'); return; }
+  lines.push({name, price, qty});
+  nameEl.value=''; priceEl.value=''; qtyEl.value=1;
+  render();
+}
+
+function removeLine(idx){ lines.splice(idx, 1); render(); }
+
+function yen(n){ return (n<0?'-':'') + '¥' + Math.abs(Math.floor(n)).toLocaleString(); }
+
+function getSetjan(){
+  const mode = document.querySelector('input[name="setjan_mode"]:checked')?.value || 'none';
+  if(mode === 'on'){
+    return Math.max(0, Number(setjanAmountEl.value||0));
+  }
+  return 0;
+}
+
+function getOptionTotal(){
+  let sum = 0;
+  optionChecks.forEach(ch => { if(ch.checked){ sum += Number(ch.value||0); } });
+  return sum;
+}
+
+function render(){
+  tableBody.innerHTML = '';
+  lines.forEach((ln, idx)=>{
+    const tr = document.createElement('tr');
+    const sub = ln.price * ln.qty;
+    tr.innerHTML = `
+      <td style="text-align:left">${ln.name}</td>
+      <td>¥${ln.price.toLocaleString()}</td>
+      <td>${ln.qty}</td>
+      <td>¥${sub.toLocaleString()}</td>
+      <td><button class="btn danger" style="padding:6px 10px; font-size:13px;" data-rm="${idx}">削除</button></td>
+    `;
+    tableBody.appendChild(tr);
+  });
+
+  // 小計
+  const subtotal = lines.reduce((s, ln)=> s + ln.price*ln.qty, 0);
+
+  // 割引
+  const setjan = getSetjan();
+  const disc4  = Math.max(0, Number(disc4El.value||0));
+  const kaden  = Math.max(0, Number(kadenEl.value||0));
+  let discountTotal = setjan + disc4 + kaden;
+
+  // オプション（加算）
+  const optionTotal = getOptionTotal();
+
+  // 警告：割引が小計を超える場合
+  if(discountTotal > subtotal){
+    showNote('割引合計が小計を超えています。数値をご確認ください。');
+    discountTotal = subtotal;
+  } else {
+    hideNote();
+  }
+
+  // 支払金額 = 小計 − 割引合計 + オプション
+  const pay = subtotal - discountTotal + optionTotal;
+
+  subtotalEl.textContent = yen(subtotal);
+  discountTotalEl.textContent = '-' + yen(discountTotal).slice(1);
+  optionTotalEl.textContent = '+' + yen(optionTotal).slice(1);
+  payEl.textContent = yen(pay);
+
+  // 保存
+  localStorage.setItem('v13Rplus_lines', JSON.stringify(lines));
+  localStorage.setItem('v13Rplus_disc4', disc4);
+  localStorage.setItem('v13Rplus_kaden', kaden);
+  localStorage.setItem('v13Rplus_setjan_mode', document.querySelector('input[name="setjan_mode"]:checked')?.value || 'none');
+  localStorage.setItem('v13Rplus_setjan_amount', setjan);
+  const opts = Array.from(optionChecks).map(ch=> ch.checked?'1':'0').join('');
+  localStorage.setItem('v13Rplus_opts', opts);
+}
+
+function showNote(msg){ noteEl.style.display='block'; noteEl.textContent=msg; }
+function hideNote(){ noteEl.style.display='none'; noteEl.textContent=''; }
+
+(function restore(){
+  try{
+    const saved = JSON.parse(localStorage.getItem('v13Rplus_lines')||'[]');
+    if(Array.isArray(saved)) lines = saved;
+    disc4El.value  = localStorage.getItem('v13Rplus_disc4') || '';
+    kadenEl.value  = localStorage.getItem('v13Rplus_kaden') || '';
+    const mode = localStorage.getItem('v13Rplus_setjan_mode') || 'none';
+    const radio = document.querySelector('input[name="setjan_mode"][value="'+mode+'"]');
+    if(radio) radio.checked = true;
+    setjanAmountEl.style.display = (mode==='on') ? 'inline-block' : 'none';
+    const amt = localStorage.getItem('v13Rplus_setjan_amount') || '';
+    if(amt) setjanAmountEl.value = amt;
+    const opts = (localStorage.getItem('v13Rplus_opts')||'').split('');
+    optionChecks.forEach((ch, i)=>{ ch.checked = (opts[i]==='1'); });
+  }catch(e){}
+  render();
+})();
+
+addBtn.addEventListener('click', addLine);
+clearBtn.addEventListener('click', ()=>{ lines=[]; render(); });
+document.addEventListener('click', (e)=>{
+  if(e.target.matches('button[data-rm]')){
+    removeLine(Number(e.target.getAttribute('data-rm')));
+  }
+});
+
+['input','change'].forEach(ev=>{
+  disc4El.addEventListener(ev, render);
+  kadenEl.addEventListener(ev, render);
+  setjanAmountEl.addEventListener(ev, render);
+  setjanModeRadios.forEach(r=> r.addEventListener(ev, ()=>{
+    const mode = document.querySelector('input[name="setjan_mode"]:checked')?.value || 'none';
+    setjanAmountEl.style.display = (mode==='on') ? 'inline-block' : 'none';
+    if(mode!=='on'){ setjanAmountEl.value=''; }
+    render();
+  }));
+  optionChecks.forEach(ch=> ch.addEventListener(ev, render));
+});
+
+exportBtn.addEventListener('click', ()=>{
+  const rows = [['商品名','単価','数量','小計']];
+  lines.forEach(ln=> rows.push([ln.name, ln.price, ln.qty, ln.price*ln.qty]));
+  rows.push([]);
+  const subtotal = lines.reduce((s, ln)=> s + ln.price*ln.qty, 0);
+  const setjan = getSetjan();
+  const disc4  = Math.max(0, Number(disc4El.value||0));
+  const kaden  = Math.max(0, Number(kadenEl.value||0));
+  const discountTotal = Math.min(subtotal, setjan+disc4+kaden);
+  const optionTotal = getOptionTotal();
+  const pay = subtotal - discountTotal + optionTotal;
+
+  rows.push(['小計', subtotal]);
+  rows.push(['セットジャン', setjan]);
+  rows.push(['4番値引き', disc4]);
+  rows.push(['家電値引き', kaden]);
+  rows.push(['割引合計', discountTotal]);
+  rows.push(['オプション加算', optionTotal]);
+  rows.push(['お支払い金額', pay]);
+  const csv = rows.map(r=> r.join(',')).join('\\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'denpyou明細_v13Rplus.csv';
+  a.click();
+});
+
+printBtn.addEventListener('click', ()=> window.print());
+copyBtn.addEventListener('click', ()=> {
+  const txt = payEl.textContent.replace(/[^\d]/g, '');
+  navigator.clipboard.writeText(txt).then(()=>{
+    noteEl.style.display='block';
+    noteEl.textContent='お支払い金額をコピーしました。';
+    setTimeout(()=>{ hideNote(); }, 1600);
+  });
+});
+</script>
+</body>
+</html>
